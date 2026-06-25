@@ -1,5 +1,4 @@
-name: Build CI
-
+name: Build and Test (CI)
 on:
   push:
     branches: [ main, master ]
@@ -7,50 +6,50 @@ on:
     branches: [ main, master ]
 
 env:
-  # Opt-in to Node.js 24 to resolve deprecation warnings
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+  DOTNET_NOLOGO: "true"
 
 jobs:
   build:
-    name: Build and Verify
-    runs-on: windows-latest
+    runs-on: windows-2022
 
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup .NET SDK
+      - name: Set up .NET 8
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '8.0.x'
+          dotnet-version: 8.0.x
+
+      - name: Clear NuGet cache
+        run: dotnet nuget locals all --clear
 
       - name: Restore NuGet packages
         run: dotnet restore CyberBot.csproj
 
-      - name: Build (Release)
-        run: |
-          dotnet build CyberBot.csproj --configuration Release
-          Write-Host "Build finished. Checking output directory..."
-          $outPath = "bin/Release/net8.0-windows"
-          if (Test-Path $outPath) {
-            Get-ChildItem -Path $outPath -Recurse | Select-Object FullName
-          }
+      - name: Build Release
+        run: dotnet build CyberBot.csproj --configuration Release --no-restore
 
-      - name: Confirm build artifact exists
+      - name: Publish Application
+        run: dotnet publish CyberBot.csproj --configuration Release --self-contained false --output ./publish
+
+      - name: Check Publish Output
+        shell: pwsh
         run: |
-          $targetPath = "bin/Release/net8.0-windows"
-          if (Test-Path $targetPath) {
-            $exePath = Join-Path $targetPath "CyberBot.exe"
-            $dllPath = Join-Path $targetPath "CyberBot.dll"
-            
-            if ((Test-Path $exePath) -or (Test-Path $dllPath)) {
-              Write-Host "✅ Build artifact found successfully."
+          $publishDir = "./publish"
+          if (Test-Path $publishDir) {
+            Write-Host "Contents of publish directory:"
+            Get-ChildItem $publishDir -Recurse | Select-Object -ExpandProperty FullName
+            if (Test-Path (Join-Path $publishDir "CyberBot.exe")) {
+              Write-Host "✅ CyberBot.exe found!"
+            } elseif (Test-Path (Join-Path $publishDir "CyberBot.dll")) {
+              Write-Host "✅ CyberBot.dll found!"
             } else {
-              Write-Error "❌ Could not find CyberBot.exe or CyberBot.dll in $targetPath"
+              Write-Error "❌ No executable or DLL found!"
               exit 1
             }
           } else {
-            Write-Error "❌ Target directory $targetPath does not exist. Build may have failed silently."
+            Write-Error "❌ Publish directory not found!"
             exit 1
           }
-        shell: pwsh
