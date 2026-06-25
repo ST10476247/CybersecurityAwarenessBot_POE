@@ -1,0 +1,56 @@
+name: Build CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+env:
+  # Opt-in to Node.js 24 to resolve deprecation warnings
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  build:
+    name: Build and Verify
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore NuGet packages
+        run: dotnet restore CyberBot.csproj
+
+      - name: Build (Release)
+        run: |
+          dotnet build CyberBot.csproj --configuration Release
+          Write-Host "Build finished. Checking output directory..."
+          $outPath = "bin/Release/net8.0-windows"
+          if (Test-Path $outPath) {
+            Get-ChildItem -Path $outPath -Recurse | Select-Object FullName
+          }
+
+      - name: Confirm build artifact exists
+        run: |
+          $targetPath = "bin/Release/net8.0-windows"
+          if (Test-Path $targetPath) {
+            $exePath = Join-Path $targetPath "CyberBot.exe"
+            $dllPath = Join-Path $targetPath "CyberBot.dll"
+            
+            if ((Test-Path $exePath) -or (Test-Path $dllPath)) {
+              Write-Host "✅ Build artifact found successfully."
+            } else {
+              Write-Error "❌ Could not find CyberBot.exe or CyberBot.dll in $targetPath"
+              exit 1
+            }
+          } else {
+            Write-Error "❌ Target directory $targetPath does not exist. Build may have failed silently."
+            exit 1
+          }
+        shell: pwsh
